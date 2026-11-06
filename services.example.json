@@ -1,0 +1,41 @@
+{
+  "language": "pt",
+  "intervalSeconds": 300,
+  "notifyOnStart": true,
+  "services": [
+    {
+      "name": "Cloudflare",
+      "type": "statuspage",
+      "url": "https://www.cloudflarestatus.com",
+      "components": ["Workers", "D1", "Workers KV"]
+    },
+    {
+      "name": "PlanetScale",
+      "type": "statuspage",
+      "url": "https://www.planetscalestatus.com"
+    },
+    {
+      "name": "Shopify",
+      "type": "statuspage",
+      "url": "https://www.shopifystatus.com",
+      "components": ["Admin", "Checkout", "Storefront", "API & Mobile"]
+    },
+    {
+      "name": "Claude",
+      "type": "statuspage",
+      "url": "https://status.claude.com",
+      "components": ["claude.ai", "Claude API (api.anthropic.com)", "Claude Code"]
+    },
+    {
+      "name": "AWS Lambda us-east-1",
+      "type": "rss",
+      "url": "https://status.aws.amazon.com/rss/lambda-us-east-1.rss"
+    },
+    {
+      "name": "Minha API",
+      "type": "http",
+      "url": "https://meu-projeto.example.com/health",
+      "enabled": false
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+services:
+  statusbot:
+    image: ghcr.io/wisley7l/statusbot:latest
+    # build: .            # use this line instead of `image` to build from your clone
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./services.json:/config/services.json:ro
+      - statusbot-data:/data
+
+volumes:
+  statusbot-data:
