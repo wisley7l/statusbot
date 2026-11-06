@@ -1,10 +1,11 @@
 import { CHECKS } from "./checks/index.ts";
 import { listComponents } from "./checks/statuspage.ts";
+import { answer, listen } from "./commands.ts";
 import { ConfigError, loadConfig } from "./config.ts";
 import { message, startMessage, step, type State } from "./engine.ts";
 import { MESSAGES } from "./i18n.ts";
 import { loadState, saveState } from "./state.ts";
-import { console_, recentChats, telegram, type Telegram } from "./telegram.ts";
+import { console_, getUpdates, recentChats, setCommands, telegram, type Telegram } from "./telegram.ts";
 import type { CheckContext, Config, Signal } from "./types.ts";
 
 const USER_AGENT = "statusbot (+https://github.com/wisley7l/statusbot)";
@@ -71,16 +72,38 @@ async function run(once: boolean): Promise<void> {
     throw new ConfigError("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are required (or DRY_RUN=1 to print instead of sending)");
   }
   const bot = dry ? console_ : telegram(env.TELEGRAM_BOT_TOKEN!, env.TELEGRAM_CHAT_ID!);
-  log(`watching ${config.services.filter((s) => s.enabled !== false).length} services every ${config.intervalSeconds}s, language=${config.language}${dry ? ", DRY_RUN" : ""}`);
+  const services = config.services.filter((s) => s.enabled !== false).length;
+  log(`watching ${services} services every ${config.intervalSeconds}s, language=${config.language}${dry ? ", DRY_RUN" : ""}`);
 
   // A restart is not a first run: the saved state keeps alerts from repeating.
   let state = await loadState(statePath);
+  let checkedAt: number | undefined;
   const stop = new AbortController();
   for (const sig of ["SIGINT", "SIGTERM"] as const) process.once(sig, () => stop.abort());
+
+  let listening: Promise<void> | undefined;
+  if (!dry && !once) {
+    const token = env.TELEGRAM_BOT_TOKEN!;
+    const t = MESSAGES[config.language];
+    setCommands(token, [
+      { command: "status", description: t.commandDescriptions.status },
+      { command: "help", description: t.commandDescriptions.help },
+    ]).catch((err) => log(`could not set the command menu (${(err as Error).message})`));
+    listening = listen({
+      poll: (offset, timeoutSec, signal) => getUpdates(token, offset, timeoutSec, signal),
+      reply: (text) => bot.send(text),
+      answer: (text, chatType) =>
+        answer(text, chatType, { state, checkedAt, services, intervalSeconds: config.intervalSeconds, now: Date.now(), t }),
+      chatId: env.TELEGRAM_CHAT_ID!,
+      signal: stop.signal,
+      log,
+    });
+  }
 
   while (!stop.signal.aborted) {
     try {
       state = await cycle(config, bot, statePath, state);
+      checkedAt = Date.now();
     } catch (err) {
       log(`cycle failed: ${(err as Error).stack ?? err}`);
     }
@@ -90,6 +113,7 @@ async function run(once: boolean): Promise<void> {
       stop.signal.addEventListener("abort", () => (clearTimeout(timer), resolve()), { once: true });
     });
   }
+  await listening;
   log("stopped");
 }
 
@@ -100,7 +124,8 @@ async function main(args: string[]): Promise<void> {
     const chats = await recentChats(env.TELEGRAM_BOT_TOKEN);
     console.log(chats.length
       ? `chat_id\ttype\tname\n${chats.join("\n")}`
-      : "No chats yet. Send any message to your bot (in a group: /start@your_bot) and run this again.");
+      : "No chats yet. Send any message to your bot (in a group: /start@your_bot) and run this again.\n" +
+        "If the bot is already running, stop it first: it reads the messages before this command can.");
     return;
   }
   if (cmd === "components") {

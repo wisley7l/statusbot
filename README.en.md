@@ -106,6 +106,32 @@ docker run -d --name statusbot --restart unless-stopped --env-file .env \
 
 Changed `services.json`? `docker compose restart`.
 
+## Commands
+
+In the bot's chat (the menu shows up when you type `/`):
+
+| Command | Reply |
+|---|---|
+| `/status` | How everything is right now: what is not normal first, for how long and why. |
+| `/help` | What the bot does and what it is watching. |
+
+```
+⚠️ 1 of 14 signals not normal
+
+🔴 My API — down for 12 min (HTTP 502)
+🟢 Cloudflare · Workers
+...
+
+Last read 2 min ago.
+```
+
+Only `TELEGRAM_CHAT_ID` gets answers — any other chat is ignored (and shows up in the log).
+`/status` answers right away from the latest reading, without fetching anything. In a group, the
+bot only answers commands.
+
+While the bot is running, `chat-id` finds nothing: the bot reads the messages first. Stop the bot
+to use it.
+
 ## Configuration
 
 ```json

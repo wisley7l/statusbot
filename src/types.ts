@@ -51,6 +51,14 @@ export interface Messages {
   started: (signals: number, services: number) => string;
   notUp: string;
   duration: (ms: number) => string;
+  /** Chat commands (/help, /status). */
+  help: (signals: number, services: number, every: string) => string;
+  statusSummary: (notUp: number, signals: number) => string;
+  /** How long a signal has been in its status: "há 12 min" / "for 12 min". */
+  lasting: (duration: string) => string;
+  lastRead: (ago: string) => string;
+  notReadYet: string;
+  commandDescriptions: { status: string; help: string };
 }
 
 export interface CheckContext {

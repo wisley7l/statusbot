@@ -106,6 +106,32 @@ docker run -d --name statusbot --restart unless-stopped --env-file .env \
 
 Mudou o `services.json`? `docker compose restart`.
 
+## Comandos
+
+No chat do bot (o menu aparece ao digitar `/`):
+
+| Comando | Resposta |
+|---|---|
+| `/status` | Como está tudo agora: o que está fora do normal primeiro, há quanto tempo e por quê. |
+| `/help` | O que o bot faz e o que está vigiando. |
+
+```
+⚠️ 1 de 14 sinais fora do normal
+
+🔴 GoPay API (staging) — fora do ar há 12 min (HTTP 502)
+🟢 Cloudflare · Workers
+...
+
+Última leitura há 2 min.
+```
+
+Só o `TELEGRAM_CHAT_ID` recebe resposta — qualquer outro chat é ignorado (e aparece no log). O
+`/status` responde na hora com a última leitura, sem consultar nada de novo. Em grupo, o bot só
+responde a comandos.
+
+Com o bot rodando, o `chat-id` não encontra nada: o bot lê as mensagens antes. Pare o bot pra
+usar.
+
 ## Configuração
 
 ```json

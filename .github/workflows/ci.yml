@@ -47,3 +47,17 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  # Keeps only the current image (latest) and the one before it, for a rollback. Multi-arch aware:
+  # deleting an image takes its platform and attestation manifests with it, and kept images keep theirs.
+  cleanup:
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          keep-n-tagged: 2
+          delete-untagged: true
+          delete-partial-images: true

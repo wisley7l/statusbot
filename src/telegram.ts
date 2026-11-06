@@ -1,3 +1,5 @@
+import type { Update } from "./commands.ts";
+
 const API = "https://api.telegram.org";
 
 export interface Telegram {
@@ -33,6 +35,26 @@ export const console_: Telegram = {
     console.log(`\n--- message ---\n${text.replace(/<\/?b>/g, "")}\n---------------`);
   },
 };
+
+async function call<T>(token: string, method: string, params: object, signal: AbortSignal): Promise<T> {
+  const res = await fetch(`${API}/bot${token}/${method}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(params),
+    signal,
+  });
+  const body = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string; result?: T };
+  if (!body.ok) throw new Error(`Telegram ${res.status}: ${body.description ?? "no description"}`);
+  return body.result as T;
+}
+
+/** Long-polls for new messages. The request outlives Telegram's own timeout by a margin. */
+export const getUpdates = (token: string, offset: number, timeoutSec: number, signal: AbortSignal): Promise<Update[]> =>
+  call<Update[]>(token, "getUpdates", { offset, timeout: timeoutSec }, AbortSignal.any([signal, AbortSignal.timeout((timeoutSec + 15) * 1000)]));
+
+/** The menu Telegram shows when you type "/". */
+export const setCommands = (token: string, commands: { command: string; description: string }[]): Promise<void> =>
+  call<void>(token, "setMyCommands", { commands }, AbortSignal.timeout(15_000));
 
 /** Chats that have talked to the bot recently — how you find your TELEGRAM_CHAT_ID. */
 export async function recentChats(token: string): Promise<string[]> {
