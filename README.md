@@ -1,59 +1,59 @@
 # statusbot
 
-[English](README.en.md) · **Português**
+**English** · [Português](README.pt-BR.md)
 
-Avisa no Telegram quando um serviço de que você depende cai — e quando volta.
+Telegram alerts when a service you depend on goes down — and when it comes back.
 
 ```
-🔴 Cloudflare · D1 — fora do ar
+🔴 Cloudflare · D1 — down
 D1 queries failing
 https://stspg.io/abc123
 
-🟢 Cloudflare · D1 voltou — fora do ar por 23 min
+🟢 Cloudflare · D1 is back — down for 23 min
 ```
 
-Lê as páginas de status públicas dos fornecedores (Cloudflare, PlanetScale, Shopify, Claude e
-qualquer outra no formato Statuspage), feeds RSS (AWS) e os seus próprios endpoints. Só manda
-mensagem quando algo **muda**: nada de alerta repetido a cada 5 minutos.
+It reads vendors' public status pages (Cloudflare, PlanetScale, Shopify, Claude and anything else
+in the Statuspage format), RSS feeds (AWS) and your own endpoints. It only messages when something
+**changes**: no repeated alert every 5 minutes.
 
-- Node 24 + TypeScript, **zero dependências**.
-- Um container, uma pasta de estado, um arquivo de configuração.
-- Mensagens em português ou inglês.
+- Node 24 + TypeScript, **zero dependencies**.
+- One container, one state folder, one config file.
+- Messages in English or Portuguese.
 
-## Como funciona
+## How it works
 
-A cada `intervalSeconds` (padrão 5 min), o bot lê todos os serviços, compara com a leitura anterior
-(guardada em `/data/state.json`) e avisa o que mudou.
+Every `intervalSeconds` (default 5 min) the bot reads every service, compares with the previous
+reading (kept in `/data/state.json`) and reports what changed.
 
-| Situação | O que acontece |
+| Situation | What happens |
 |---|---|
-| Primeira leitura | Sem alerta. Só a mensagem de início, listando o que já está fora do normal. |
-| Mudou de estado | Alerta. No `http`, só depois de **2 falhas seguidas** — um timeout isolado não acorda ninguém. |
-| Voltou ao normal | Alerta com quanto tempo ficou fora. |
-| Não conseguiu ler a página de status | Vira "sem leitura", não "fora do ar" — e só avisa depois de 3 leituras seguidas. |
-| O Telegram falhou | A mensagem fica guardada e sai no próximo ciclo. |
-| O container reiniciou | Nada se repete: o estado está no volume. |
+| First reading | No alert. Only the startup message, listing what is already not normal. |
+| Status changed | Alert. For `http`, only after **2 failures in a row** — one timeout wakes no one. |
+| Back to normal | Alert with how long it lasted. |
+| Could not read the status page | Becomes "no reading", not "down" — and only after 3 readings in a row. |
+| Telegram failed | The message is kept and sent on the next cycle. |
+| Container restarted | Nothing repeats: the state is on the volume. |
 
-> **Rode fora do que você vigia.** Um monitor de Cloudflare rodando num Worker cai junto com a
-> Cloudflare. Uma VPS, um Raspberry Pi ou um servidor em casa servem.
+> **Run it outside what you watch.** A Cloudflare monitor on a Worker goes down with Cloudflare.
+> A VPS, a Raspberry Pi or a home server will do.
 
-## Passo a passo
+## Step by step
 
-### 1. Crie o bot no Telegram
+### 1. Create the Telegram bot
 
-1. No Telegram, abra uma conversa com [@BotFather](https://t.me/BotFather).
-2. Mande `/newbot`.
-3. Dê um nome (aparece nas conversas, ex.: `Meu Status`) e um username, que precisa terminar em
-   `bot` (ex.: `meu_status_bot`).
-4. O BotFather responde com o **token**, algo como `123456789:AAH...`. Guarde: é a senha do bot.
+1. In Telegram, open a chat with [@BotFather](https://t.me/BotFather).
+2. Send `/newbot`.
+3. Pick a name (shown in chats, e.g. `My Status`) and a username ending in `bot`
+   (e.g. `my_status_bot`).
+4. BotFather replies with the **token**, like `123456789:AAH...`. Keep it: it is the bot's password.
 
-### 2. Descubra o seu chat_id
+### 2. Find your chat_id
 
-O bot só pode mandar mensagem pra quem já falou com ele.
+A bot can only message someone who has talked to it.
 
-1. Abra a conversa com o seu bot (o link `t.me/meu_status_bot`) e mande qualquer mensagem.
-   - **Pra receber num grupo:** adicione o bot ao grupo e mande `/start@meu_status_bot` lá.
-2. Rode, trocando o token:
+1. Open the chat with your bot (`t.me/my_status_bot`) and send any message.
+   - **To receive in a group:** add the bot to the group and send `/start@my_status_bot` there.
+2. Run, with your token:
 
    ```bash
    docker run --rm -e TELEGRAM_BOT_TOKEN=123456789:AAH... ghcr.io/wisley7l/statusbot chat-id
@@ -61,13 +61,13 @@ O bot só pode mandar mensagem pra quem já falou com ele.
 
    ```
    chat_id      type      name
-   987654321    private   Seu Nome (@seu_usuario)
-   -1001234567  supergroup  Alertas do time
+   987654321    private   Your Name (@your_user)
+   -1001234567  supergroup  Team alerts
    ```
 
-   O `chat_id` de grupo é negativo — copie com o sinal.
+   Group chat_ids are negative — copy the sign too.
 
-### 3. Escolha o que vigiar
+### 3. Choose what to watch
 
 ```bash
 mkdir statusbot && cd statusbot
@@ -76,27 +76,27 @@ curl -fsSL https://raw.githubusercontent.com/wisley7l/statusbot/main/services.ex
 curl -fsSL https://raw.githubusercontent.com/wisley7l/statusbot/main/.env.example -o .env
 ```
 
-Preencha o `.env` com o token e o chat_id, e edite o `services.json` (veja
-[Configuração](#configuração)).
+Fill `.env` with the token and chat_id, set `"language": "en"` and edit `services.json` (see
+[Configuration](#configuration)).
 
-### 4. Teste sem mandar nada
+### 4. Try it without sending
 
 ```bash
 docker run --rm -e DRY_RUN=1 -v ./services.json:/config/services.json:ro ghcr.io/wisley7l/statusbot --once
 ```
 
-Imprime as mensagens em vez de mandar, e mostra se algum componente não foi encontrado.
+Prints the messages instead of sending them, and shows any component that was not found.
 
-### 5. Suba
+### 5. Run it
 
 ```bash
 docker compose up -d
 docker compose logs -f
 ```
 
-A primeira mensagem chega na hora: `🤖 statusbot no ar — vigiando 12 sinais de 5 serviços.`
+The first message arrives right away: `🤖 statusbot is up — watching 12 signals from 5 services.`
 
-Sem compose:
+Without compose:
 
 ```bash
 docker run -d --name statusbot --restart unless-stopped --env-file .env \
@@ -104,59 +104,58 @@ docker run -d --name statusbot --restart unless-stopped --env-file .env \
   ghcr.io/wisley7l/statusbot
 ```
 
-Mudou o `services.json`? `docker compose restart`.
+Changed `services.json`? `docker compose restart`.
 
-## Comandos
+## Commands
 
-No chat do bot (o menu aparece ao digitar `/`):
+In the bot's chat (the menu shows up when you type `/`):
 
-| Comando | Resposta |
+| Command | Reply |
 |---|---|
-| `/status` | Como está tudo agora: o que está fora do normal primeiro, há quanto tempo e por quê. |
-| `/help` | O que o bot faz e o que está vigiando. |
+| `/status` | How everything is right now: what is not normal first, for how long and why. |
+| `/help` | What the bot does and what it is watching. |
 
 ```
-⚠️ 1 de 14 sinais fora do normal
+⚠️ 1 of 14 signals not normal
 
-🔴 GoPay API (staging) — fora do ar há 12 min (HTTP 502)
+🔴 My API — down for 12 min (HTTP 502)
 🟢 Cloudflare · Workers
 ...
 
-Última leitura há 2 min.
+Last read 2 min ago.
 ```
 
-Só o `TELEGRAM_CHAT_ID` recebe resposta — qualquer outro chat é ignorado (e aparece no log). O
-`/status` responde na hora com a última leitura, sem consultar nada de novo. Em grupo, o bot só
-responde a comandos.
+Only `TELEGRAM_CHAT_ID` gets answers — any other chat is ignored (and shows up in the log).
+`/status` answers right away from the latest reading, without fetching anything. In a group, the
+bot only answers commands.
 
-Com o bot rodando, o `chat-id` não encontra nada: o bot lê as mensagens antes. Pare o bot pra
-usar.
+While the bot is running, `chat-id` finds nothing: the bot reads the messages first. Stop the bot
+to use it.
 
-## Configuração
+## Configuration
 
 ```json
 {
-  "language": "pt",
+  "language": "en",
   "intervalSeconds": 300,
   "notifyOnStart": true,
   "services": [ ... ]
 }
 ```
 
-| Campo | Padrão | |
+| Field | Default | |
 |---|---|---|
-| `language` | `pt` | `pt` ou `en`. A variável `STATUSBOT_LANGUAGE` tem prioridade. |
-| `intervalSeconds` | `300` | Mínimo 30. A variável `STATUSBOT_INTERVAL` tem prioridade. |
-| `notifyOnStart` | `true` | Mensagem quando o bot sobe pela primeira vez. |
+| `language` | `pt` | `pt` or `en`. The `STATUSBOT_LANGUAGE` variable takes precedence. |
+| `intervalSeconds` | `300` | At least 30. The `STATUSBOT_INTERVAL` variable takes precedence. |
+| `notifyOnStart` | `true` | Message when the bot starts for the first time. |
 
-Todo serviço tem `name` (único), `type` e `url`. Opcionais em todos: `enabled` (`false` desliga sem
-apagar), `timeoutMs`, `confirmations` (quantas leituras seguidas confirmam uma mudança).
+Every service has `name` (unique), `type` and `url`. Optional on all: `enabled` (`false` turns it
+off without deleting), `timeoutMs`, `confirmations` (how many readings in a row confirm a change).
 
-### `statuspage` — páginas de status de fornecedores
+### `statuspage` — vendor status pages
 
-Serve pra qualquer página no formato Atlassian Statuspage: o endereço termina em
-`/api/v2/summary.json` e responde. É o formato de Cloudflare, PlanetScale, Shopify, Claude,
-GitHub, OpenAI, Vercel, Stripe e muitos outros.
+Works with any page in the Atlassian Statuspage format: `<url>/api/v2/summary.json` answers. That is
+Cloudflare, PlanetScale, Shopify, Claude, GitHub, OpenAI, Vercel, Stripe and many more.
 
 ```json
 {
@@ -167,20 +166,19 @@ GitHub, OpenAI, Vercel, Stripe e muitos outros.
 }
 ```
 
-- **Com `components`**: um alerta por componente, com o incidente que o afeta.
-- **Sem `components`**: o indicador geral da página.
+- **With `components`**: one alert per component, with the incident affecting it.
+- **Without `components`**: the page's overall indicator.
 
-Prefira listar componentes. Páginas grandes vivem com algo fora do normal: a da Cloudflare
-costuma marcar "Partial System Outage" por causa de um datacenter em manutenção do outro lado do
-mundo.
+Prefer listing components. Large pages always have something off: Cloudflare's often shows
+"Partial System Outage" because of a datacenter under maintenance on the other side of the world.
 
-Os nomes exatos dos componentes:
+Exact component names:
 
 ```bash
 docker run --rm ghcr.io/wisley7l/statusbot components https://www.cloudflarestatus.com
 ```
 
-### `rss` — feeds de status
+### `rss` — status feeds
 
 ```json
 {
@@ -190,51 +188,50 @@ docker run --rm ghcr.io/wisley7l/statusbot components https://www.cloudflarestat
 }
 ```
 
-O item mais recente decide: se o título diz que resolveu (`resolvedPattern`, por padrão
-`operating normally|[resolved]|resolved`), está ok; senão, degradado. Feed vazio = ok.
+The latest item decides: if its title says resolved (`resolvedPattern`, default
+`operating normally|[resolved]|resolved`), it is up; otherwise, degraded. Empty feed = up.
 
-Na AWS, o feed é por serviço e região: `https://status.aws.amazon.com/rss/<serviço>-<região>.rss`
+On AWS, feeds are per service and region: `https://status.aws.amazon.com/rss/<service>-<region>.rss`
 (`s3-us-east-1`, `rds-sa-east-1`…).
 
-### `http` — os seus endpoints
+### `http` — your endpoints
 
 ```json
 {
-  "name": "Minha API",
+  "name": "My API",
   "type": "http",
-  "url": "https://meu-projeto.example.com/health",
+  "url": "https://my-project.example.com/health",
   "expectStatus": [200],
   "contains": "ok",
   "headers": { "authorization": "Bearer ..." }
 }
 ```
 
-Fora do ar quando não responde em `timeoutMs` (padrão 10 s), responde fora de `expectStatus`
-(padrão: qualquer 2xx) ou o corpo não contém `contains`. Avisa depois de 2 falhas seguidas
-(`confirmations`).
+Down when it does not answer within `timeoutMs` (default 10 s), answers outside `expectStatus`
+(default: any 2xx) or the body lacks `contains`. Alerts after 2 failures in a row (`confirmations`).
 
-Página de status confirma incidente com atraso, às vezes de meia hora. Um `http` no seu próprio
-`/health` avisa em minutos — inclusive quando o problema é seu, não do fornecedor.
+Status pages confirm incidents late, sometimes by half an hour. An `http` check on your own
+`/health` alerts within minutes — including when the problem is yours, not the vendor's.
 
-## Um tipo novo
+## A new check type
 
-1. Crie `src/checks/<tipo>.ts` exportando uma função `Check`: recebe a configuração do serviço e
-   devolve uma lista de sinais `{ key, label, status, detail?, link?, confirmations }`.
-2. Registre em `src/checks/index.ts`.
-3. Teste em `test/` (`npm test`).
+1. Create `src/checks/<type>.ts` exporting a `Check`: it receives the service config and returns
+   signals `{ key, label, status, detail?, link?, confirmations }`.
+2. Register it in `src/checks/index.ts`.
+3. Test it in `test/` (`npm test`).
 
-Se a leitura falhar, lance um erro: o bot transforma em "sem leitura", que não é "fora do ar".
+If reading fails, throw: the bot turns it into "no reading", which is not "down".
 
-## Rodando sem Docker
+## Running without Docker
 
 ```bash
 cp services.example.json services.json
-DRY_RUN=1 npm run once                                    # testa
-TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=... npm start     # roda
+DRY_RUN=1 npm run once                                    # try
+TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=... npm start     # run
 ```
 
-Precisa de Node 24 ou mais novo.
+Requires Node 24 or newer.
 
-## Licença
+## License
 
 MIT
