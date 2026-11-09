@@ -114,6 +114,9 @@ No chat do bot (o menu aparece ao digitar `/`):
 |---|---|
 | `/status` | Como está tudo agora: o que está fora do normal primeiro, há quanto tempo e por quê. |
 | `/help` | O que o bot faz e o que está vigiando. |
+| `/id` | O chat_id desta conversa. |
+| `/leave` | Sai do bot (quem não é o admin). Pra voltar, é só mandar mensagem de novo. |
+| `/chats` | Só o admin: quem mais pode usar o bot, com botões pra remover, bloquear e desbloquear. |
 
 ```
 ⚠️ 1 de 14 sinais fora do normal
@@ -125,12 +128,57 @@ No chat do bot (o menu aparece ao digitar `/`):
 Última leitura há 2 min.
 ```
 
-Só o `TELEGRAM_CHAT_ID` recebe resposta — qualquer outro chat é ignorado (e aparece no log). O
-`/status` responde na hora com a última leitura, sem consultar nada de novo. Em grupo, o bot só
+O `/status` responde na hora com a última leitura, sem consultar nada de novo. Em grupo, o bot só
 responde a comandos.
 
-Com o bot rodando, o `chat-id` não encontra nada: o bot lê as mensagens antes. Pare o bot pra
-usar.
+### Outras pessoas usando o bot
+
+O `TELEGRAM_CHAT_ID` é o **admin**: recebe os alertas e decide quem mais pode usar o bot.
+
+1. Alguém novo manda qualquer mensagem pro bot (em grupo, um comando como `/start@meu_status_bot`).
+2. O bot responde que pediu autorização, e você recebe:
+
+   ```
+   🔔 Ana @ana quer usar o bot.
+   chat_id 555000111
+   [ ✅ Aprovar ]  [ ❌ Recusar ]  [ 🚫 Bloquear ]
+   ```
+
+3. Você escolhe:
+   - **Aprovar**: a pessoa é avisada e já pode usar `/status`, `/help` e `/id`, cada uma na própria
+     conversa.
+   - **Recusar**: a pessoa é avisada e pode pedir de novo quando quiser.
+   - **Bloquear**: o bot passa a ignorar a pessoa, sem avisar. É pra quem insiste.
+
+Os alertas continuam indo só pro admin.
+
+- **Remover alguém**: mande `/chats` e toque em **Remover** (a pessoa é avisada e pode pedir de
+  novo) ou **Bloquear** (o bot passa a ignorá-la, sem avisar). **Desbloquear** tira o bloqueio, e
+  aí ela pode pedir de novo.
+- **A pessoa quer sair**: ela manda `/leave` e sai na hora, sem precisar de aprovação. Você recebe
+  um aviso. Pra voltar, ela manda uma mensagem e o pedido chega de novo.
+
+Quem pode usar o bot fica em `/data/chats.json`, no mesmo volume do estado, e sobrevive a restart.
+
+Se o `TELEGRAM_CHAT_ID` for um grupo, qualquer pessoa do grupo pode aprovar ou recusar.
+
+Toda mensagem que chega fica no log com o chat_id de quem mandou:
+
+```
+chat 987654321 (Seu Nome @seu_usuario): /status
+chat 555000111 (Ana @ana): /start — asking the admin
+admin: approved chat 555000111 (Ana @ana)
+chat 555000111 (Ana @ana): /status
+chat 444000222 (Spammer): /status — blocked, ignored
+```
+
+O texto das mensagens não vai pro log, só o comando (ou `text`).
+
+Quer que várias pessoas recebam os **alertas** também? Crie um grupo, adicione elas e o bot, e use
+o chat_id do grupo como `TELEGRAM_CHAT_ID`.
+
+Com o bot rodando, o `chat-id` não encontra nada: o bot lê as mensagens antes. Use o `/id` no
+chat.
 
 ## Configuração
 

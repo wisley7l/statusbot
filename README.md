@@ -114,6 +114,9 @@ In the bot's chat (the menu shows up when you type `/`):
 |---|---|
 | `/status` | How everything is right now: what is not normal first, for how long and why. |
 | `/help` | What the bot does and what it is watching. |
+| `/id` | This chat's chat_id. |
+| `/leave` | Leaves the bot (anyone but the admin). To come back, just send a message again. |
+| `/chats` | Admin only: who else may use the bot, with buttons to remove, block and unblock. |
 
 ```
 ⚠️ 1 of 14 signals not normal
@@ -125,12 +128,57 @@ In the bot's chat (the menu shows up when you type `/`):
 Last read 2 min ago.
 ```
 
-Only `TELEGRAM_CHAT_ID` gets answers — any other chat is ignored (and shows up in the log).
 `/status` answers right away from the latest reading, without fetching anything. In a group, the
 bot only answers commands.
 
-While the bot is running, `chat-id` finds nothing: the bot reads the messages first. Stop the bot
-to use it.
+### Other people using the bot
+
+`TELEGRAM_CHAT_ID` is the **admin**: it gets the alerts and decides who else may use the bot.
+
+1. Someone new sends the bot any message (in a group, a command like `/start@my_status_bot`).
+2. The bot replies that it asked for permission, and you get:
+
+   ```
+   🔔 Ana @ana wants to use the bot.
+   chat_id 555000111
+   [ ✅ Approve ]  [ ❌ Refuse ]  [ 🚫 Block ]
+   ```
+
+3. You choose:
+   - **Approve**: they are told and can use `/status`, `/help` and `/id`, each in their own chat.
+   - **Refuse**: they are told and can ask again whenever they want.
+   - **Block**: the bot ignores them from then on, without telling them. For those who insist.
+
+Alerts still go only to the admin.
+
+- **Removing someone**: send `/chats` and tap **Remove** (they are told and can ask again) or
+  **Block** (the bot ignores them, without telling them). **Unblock** lifts the block, and then they
+  can ask again.
+- **Someone wants out**: they send `/leave` and are out right away, no approval needed. You get a
+  note. To come back, they send a message and the request reaches you again.
+
+Who may use the bot is kept in `/data/chats.json`, in the same volume as the state, and survives
+restarts.
+
+If `TELEGRAM_CHAT_ID` is a group, anyone in the group can approve or refuse.
+
+Every message that arrives goes to the log with the sender's chat_id:
+
+```
+chat 987654321 (Your Name @your_user): /status
+chat 555000111 (Ana @ana): /start — asking the admin
+admin: approved chat 555000111 (Ana @ana)
+chat 555000111 (Ana @ana): /status
+chat 444000222 (Spammer): /status — blocked, ignored
+```
+
+Message text is not logged, only the command (or `text`).
+
+Want several people to get the **alerts** too? Create a group, add them and the bot, and use the
+group's chat_id as `TELEGRAM_CHAT_ID`.
+
+While the bot is running, `chat-id` finds nothing: the bot reads the messages first. Use `/id` in
+the chat instead.
 
 ## Configuration
 

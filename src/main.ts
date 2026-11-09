@@ -1,11 +1,12 @@
 import { CHECKS } from "./checks/index.ts";
 import { listComponents } from "./checks/statuspage.ts";
+import { dirname, join } from "node:path";
 import { answer, listen } from "./commands.ts";
 import { ConfigError, loadConfig } from "./config.ts";
 import { message, startMessage, step, type State } from "./engine.ts";
 import { MESSAGES } from "./i18n.ts";
-import { loadState, saveState } from "./state.ts";
-import { console_, getUpdates, recentChats, setCommands, telegram, type Telegram } from "./telegram.ts";
+import { loadChats, loadState, saveChats, saveState } from "./state.ts";
+import { answerCallback, console_, editMessage, getUpdates, recentChats, setCommands, telegram, type Telegram } from "./telegram.ts";
 import type { CheckContext, Config, Signal } from "./types.ts";
 
 const USER_AGENT = "statusbot (+https://github.com/wisley7l/statusbot)";
@@ -85,16 +86,29 @@ async function run(once: boolean): Promise<void> {
   if (!dry && !once) {
     const token = env.TELEGRAM_BOT_TOKEN!;
     const t = MESSAGES[config.language];
-    setCommands(token, [
-      { command: "status", description: t.commandDescriptions.status },
-      { command: "help", description: t.commandDescriptions.help },
+    const admin = env.TELEGRAM_CHAT_ID!;
+    // Who else may use the bot, approved by the admin in the chat. Next to state.json, in the volume.
+    const chatsPath = env.STATUSBOT_CHATS ?? join(dirname(statePath), "chats.json");
+    const chats = await loadChats(chatsPath);
+    const count = (a: string) => Object.values(chats).filter((c) => c.access === a).length;
+    log(`admin is TELEGRAM_CHAT_ID; ${count("allowed")} other chat(s) approved, ${count("pending")} pending, ${count("blocked")} blocked`);
+    const menu = (...names: ("status" | "help" | "id" | "leave" | "chats")[]) =>
+      names.map((command) => ({ command, description: t.commandDescriptions[command] }));
+    Promise.all([
+      setCommands(token, menu("status", "help", "id", "leave")),
+      setCommands(token, menu("status", "help", "id", "chats"), admin),
     ]).catch((err) => log(`could not set the command menu (${(err as Error).message})`));
     listening = listen({
       poll: (offset, timeoutSec, signal) => getUpdates(token, offset, timeoutSec, signal),
-      reply: (text) => bot.send(text),
-      answer: (text, chatType) =>
-        answer(text, chatType, { state, checkedAt, services, intervalSeconds: config.intervalSeconds, now: Date.now(), t }),
-      chatId: env.TELEGRAM_CHAT_ID!,
+      send: (chatId, text, buttons) => bot.send(text, chatId, buttons),
+      edit: (chatId, messageId, text, buttons) => editMessage(token, chatId, messageId, text, buttons),
+      ack: (callbackId, text) => answerCallback(token, callbackId, text),
+      answer: (text, chat) =>
+        answer(text, chat, { state, checkedAt, services, intervalSeconds: config.intervalSeconds, now: Date.now(), t }),
+      admin,
+      chats,
+      save: (c) => saveChats(chatsPath, c),
+      t,
       signal: stop.signal,
       log,
     });

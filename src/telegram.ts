@@ -1,19 +1,26 @@
-import type { Update } from "./commands.ts";
+import type { Button, Update } from "./commands.ts";
 
 const API = "https://api.telegram.org";
 
 export interface Telegram {
-  send(text: string): Promise<void>;
+  /** Sends to `to`, or to the alerts chat when it is missing. `buttons` = inline keyboard rows. */
+  send(text: string, to?: string, buttons?: Button[][]): Promise<void>;
 }
 
 export function telegram(token: string, chatId: string): Telegram {
   return {
-    async send(text) {
+    async send(text, to = chatId, buttons) {
       for (let attempt = 1; ; attempt++) {
         const res = await fetch(`${API}/bot${token}/sendMessage`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML", link_preview_options: { is_disabled: true } }),
+          body: JSON.stringify({
+            chat_id: to,
+            text,
+            parse_mode: "HTML",
+            link_preview_options: { is_disabled: true },
+            ...(buttons && { reply_markup: { inline_keyboard: buttons } }),
+          }),
           signal: AbortSignal.timeout(15_000),
         });
         if (res.ok) return;
@@ -48,17 +55,45 @@ async function call<T>(token: string, method: string, params: object, signal: Ab
   return body.result as T;
 }
 
-/** Long-polls for new messages. The request outlives Telegram's own timeout by a margin. */
+/** Long-polls for new messages and button taps. The request outlives Telegram's own timeout by a margin. */
 export const getUpdates = (token: string, offset: number, timeoutSec: number, signal: AbortSignal): Promise<Update[]> =>
-  call<Update[]>(token, "getUpdates", { offset, timeout: timeoutSec }, AbortSignal.any([signal, AbortSignal.timeout((timeoutSec + 15) * 1000)]));
+  call<Update[]>(
+    token,
+    "getUpdates",
+    { offset, timeout: timeoutSec, allowed_updates: ["message", "callback_query"] },
+    AbortSignal.any([signal, AbortSignal.timeout((timeoutSec + 15) * 1000)]),
+  );
 
-/** The menu Telegram shows when you type "/". */
-export const setCommands = (token: string, commands: { command: string; description: string }[]): Promise<void> =>
-  call<void>(token, "setMyCommands", { commands }, AbortSignal.timeout(15_000));
+/** Replaces a message the bot sent — text and buttons. No buttons = the buttons go away. */
+export async function editMessage(token: string, chatId: string, messageId: number, text: string, buttons: Button[][] = []): Promise<void> {
+  try {
+    await call<unknown>(token, "editMessageText", {
+      chat_id: chatId,
+      message_id: messageId,
+      text,
+      parse_mode: "HTML",
+      link_preview_options: { is_disabled: true },
+      reply_markup: { inline_keyboard: buttons },
+    }, AbortSignal.timeout(15_000));
+  } catch (err) {
+    // A double tap re-renders the same thing: nothing to change is not a failure.
+    if (!/message is not modified/.test((err as Error).message)) throw err;
+  }
+}
+
+/** Stops the loading spinner on a tapped button, with an optional toast. */
+export const answerCallback = (token: string, callbackId: string, text?: string): Promise<void> =>
+  call<void>(token, "answerCallbackQuery", { callback_query_id: callbackId, text }, AbortSignal.timeout(15_000));
+
+/** The menu Telegram shows when you type "/". `chatId` = a menu just for that chat. */
+export const setCommands = (token: string, commands: { command: string; description: string }[], chatId?: string): Promise<void> =>
+  call<void>(token, "setMyCommands", { commands, ...(chatId && { scope: { type: "chat", chat_id: chatId } }) }, AbortSignal.timeout(15_000));
 
 /** Chats that have talked to the bot recently — how you find your TELEGRAM_CHAT_ID. */
 export async function recentChats(token: string): Promise<string[]> {
-  const res = await fetch(`${API}/bot${token}/getUpdates`, { signal: AbortSignal.timeout(15_000) });
+  // allowed_updates sticks between calls: the running bot narrows it, so ask for what this needs.
+  const allowed = encodeURIComponent(JSON.stringify(["message", "my_chat_member", "channel_post"]));
+  const res = await fetch(`${API}/bot${token}/getUpdates?allowed_updates=${allowed}`, { signal: AbortSignal.timeout(15_000) });
   const body = (await res.json()) as {
     ok: boolean;
     description?: string;

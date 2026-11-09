@@ -51,14 +51,37 @@ export interface Messages {
   started: (signals: number, services: number) => string;
   notUp: string;
   duration: (ms: number) => string;
-  /** Chat commands (/help, /status). */
-  help: (signals: number, services: number, every: string) => string;
+  /** Chat commands (/help, /status). The admin's help lists /chats instead of /leave. */
+  help: (signals: number, services: number, every: string, admin: boolean) => string;
   statusSummary: (notUp: number, signals: number) => string;
   /** How long a signal has been in its status: "há 12 min" / "for 12 min". */
   lasting: (duration: string) => string;
   lastRead: (ago: string) => string;
   notReadYet: string;
-  commandDescriptions: { status: string; help: string };
+  chatId: (id: string) => string;
+  /** Access requests. Names come HTML-escaped, except in button labels. */
+  requested: string;
+  waiting: string;
+  /** To the admin. `by` = who asked, when the request comes from a group. */
+  request: (chat: string, id: string, by: string) => string;
+  approve: string;
+  refuse: string;
+  approved: (who: string, id: string) => string;
+  refused: (who: string, id: string) => string;
+  blockedNote: (who: string, id: string) => string;
+  welcome: string;
+  notApproved: string;
+  removedNotice: string;
+  left: string;
+  leftAdmin: (who: string, id: string) => string;
+  adminCannotLeave: string;
+  chatsList: (lines: string[]) => string;
+  remove: (name: string) => string;
+  /** Without a name: the button on a request. */
+  block: (name?: string) => string;
+  unblock: (name: string) => string;
+  gone: string;
+  commandDescriptions: { status: string; help: string; id: string; leave: string; chats: string };
 }
 
 export interface CheckContext {
