@@ -4,6 +4,10 @@ services:
     # build: .            # use this line instead of `image` to build from your clone
     restart: unless-stopped
     env_file: .env
+    # Optional HTTP endpoint (HTTP_PORT in .env). Without HTTP_TOKEN keep the 127.0.0.1: prefix, so
+    # only this machine can reach it.
+    # ports:
+    #   - "127.0.0.1:8080:8080"
     volumes:
       - ./services.json:/config/services.json:ro
       - statusbot-data:/data

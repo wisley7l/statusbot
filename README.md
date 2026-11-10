@@ -180,6 +180,49 @@ group's chat_id as `TELEGRAM_CHAT_ID`.
 While the bot is running, `chat-id` finds nothing: the bot reads the messages first. Use `/id` in
 the chat instead.
 
+## HTTP endpoint (optional)
+
+`GET /api/status` returns in JSON the same as `/status`: each signal with its status, since when and
+why. Read-only, and off unless `HTTP_PORT` is set.
+
+| Variable | |
+|---|---|
+| `HTTP_PORT` | Turns it on, e.g. `8080`. |
+| `HTTP_TOKEN` | Optional. When set, every request needs `Authorization: Bearer <token>`. |
+| `HTTP_HOST` | Where it listens. Default `127.0.0.1`; the Docker image sets `0.0.0.0`. |
+
+**Without a token, only this machine.** Running directly, the server listens on `127.0.0.1`. In
+Docker, publish the port on the host's localhost (`127.0.0.1:8080:8080`, already in `compose.yaml`,
+commented out):
+
+```bash
+curl http://localhost:8080/api/status
+```
+
+**On a remote server, set `HTTP_TOKEN`** (e.g. `openssl rand -hex 32`) and publish the port — ideally
+behind HTTPS:
+
+```bash
+curl -H "Authorization: Bearer $HTTP_TOKEN" https://statusbot.example.com/api/status
+```
+
+```json
+{
+  "checkedAt": "2026-11-10T20:05:17.306Z",
+  "intervalSeconds": 300,
+  "services": 5,
+  "signals": 12,
+  "notUp": 1,
+  "items": [
+    { "label": "My API", "status": "down", "since": "2026-11-10T19:53:02.000Z", "detail": "HTTP 502" },
+    { "label": "Cloudflare · Workers", "status": "up", "since": "2026-11-09T08:00:00.000Z" }
+  ]
+}
+```
+
+`status` is `down`, `degraded`, `unknown` (no reading), `maintenance` or `up`, worst first. Before the
+first reading it answers `503` with `checkedAt: null`. A wrong or missing token gets `401`.
+
 ## Configuration
 
 ```json
