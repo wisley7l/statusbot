@@ -1,6 +1,6 @@
 // Chat commands and who may use them. TELEGRAM_CHAT_ID is the admin: it gets the alerts and approves
 // who else may ask the bot.
-import { escapeHtml, type State } from "./engine.ts";
+import { escapeHtml, type Entry, type State } from "./engine.ts";
 import { EMOJI } from "./i18n.ts";
 import type { Access, Chats } from "./state.ts";
 import type { Messages, Status } from "./types.ts";
@@ -18,6 +18,10 @@ export interface View {
 
 /** Worst first, so what matters is at the top of /status. */
 const ORDER: Status[] = ["down", "degraded", "unknown", "maintenance", "up"];
+
+/** The signals, worst first. Shared by /status and the HTTP endpoint. */
+export const worstFirst = (state: State): Entry[] =>
+  Object.values(state.signals).sort((a, b) => ORDER.indexOf(a.status) - ORDER.indexOf(b.status));
 
 /** A chat that may use the bot. */
 export interface ChatInfo {
@@ -51,7 +55,7 @@ export function help(v: View, admin = false): string {
 
 export function status(v: View): string {
   if (!v.state || v.checkedAt === undefined) return v.t.notReadYet;
-  const entries = Object.values(v.state.signals).sort((a, b) => ORDER.indexOf(a.status) - ORDER.indexOf(b.status));
+  const entries = worstFirst(v.state);
   const off = entries.filter((e) => e.status !== "up");
   const lines = [v.t.statusSummary(off.length, entries.length), ""];
   for (const e of entries) {

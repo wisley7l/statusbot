@@ -1,3 +1,4 @@
+import { apiConfig, serve } from "./api.ts";
 import { CHECKS } from "./checks/index.ts";
 import { listComponents } from "./checks/statuspage.ts";
 import { dirname, join } from "node:path";
@@ -72,6 +73,7 @@ async function run(once: boolean): Promise<void> {
   if (!dry && (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID)) {
     throw new ConfigError("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are required (or DRY_RUN=1 to print instead of sending)");
   }
+  const api = once ? undefined : apiConfig(env);
   const bot = dry ? console_ : telegram(env.TELEGRAM_BOT_TOKEN!, env.TELEGRAM_CHAT_ID!);
   const services = config.services.filter((s) => s.enabled !== false).length;
   log(`watching ${services} services every ${config.intervalSeconds}s, language=${config.language}${dry ? ", DRY_RUN" : ""}`);
@@ -81,6 +83,11 @@ async function run(once: boolean): Promise<void> {
   let checkedAt: number | undefined;
   const stop = new AbortController();
   for (const sig of ["SIGINT", "SIGTERM"] as const) process.once(sig, () => stop.abort());
+
+  if (api) {
+    const snapshot = () => ({ state, checkedAt, services, intervalSeconds: config.intervalSeconds });
+    await serve(api, snapshot, stop.signal, log);
+  }
 
   let listening: Promise<void> | undefined;
   if (!dry && !once) {
