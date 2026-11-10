@@ -60,6 +60,22 @@ test("an unreadable status page needs 3 readings and is not reported as an outag
   assert.equal(message(back.changes[0], MESSAGES.pt), "🟢 <b>Cloudflare · D1</b> — a leitura voltou, operando normalmente");
 });
 
+test("an up signal drops the incident once it is closed; one not up keeps the last known reason", () => {
+  const incident = { detail: "Incident with Git Operations", link: "https://stspg.io/x" };
+  // Back up while the incident is still open: the reason is current, so it stays.
+  let s = step(empty, [sig("down", incident)], 0).state;
+  s = step(s, [sig("up", incident)], MIN).state;
+  assert.equal(s.signals["Cloudflare · D1"].detail, "Incident with Git Operations");
+  // Incident closed: nothing left to explain.
+  s = step(s, [sig("up")], 2 * MIN).state;
+  assert.equal(s.signals["Cloudflare · D1"].detail, undefined);
+  assert.equal(s.signals["Cloudflare · D1"].link, undefined);
+  // Still down, but this reading has no reason: keep the last one.
+  let d = step(empty, [sig("down", incident)], 0).state;
+  d = step(d, [sig("down")], MIN).state;
+  assert.deepEqual([d.signals["Cloudflare · D1"].detail, d.signals["Cloudflare · D1"].link], [incident.detail, incident.link]);
+});
+
 test("message escapes HTML from incident names", () => {
   const s = step(empty, [sig("up")], 0).state;
   const r = step(s, [sig("degraded", { detail: "Errors on <script> & KV" })], MIN);
