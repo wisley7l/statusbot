@@ -41,7 +41,12 @@ export function step(prev: State, signals: Signal[], now: number): { state: Stat
       continue;
     }
     if (s.status === old.status) {
-      next[s.key] = { ...old, label: s.label, detail: s.detail ?? old.detail, link: s.link ?? old.link, pending: undefined };
+      // Not up: keep the last known reason when a reading has none. Up: only a current reason, so a
+      // closed incident does not linger.
+      const keep = s.status !== "up";
+      const detail = s.detail ?? (keep ? old.detail : undefined);
+      const link = s.link ?? (keep ? old.link : undefined);
+      next[s.key] = { ...old, label: s.label, detail, link, pending: undefined };
       continue;
     }
     const needed = s.status === "unknown" ? Math.max(s.confirmations, UNKNOWN_CONFIRMATIONS) : s.confirmations;
