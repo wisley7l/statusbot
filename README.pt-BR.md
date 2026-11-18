@@ -2,7 +2,8 @@
 
 [English](README.md) · **Português**
 
-Avisa no Telegram quando um serviço de que você depende cai — e quando volta.
+Avisa no Telegram, no Slack ou em qualquer webhook quando um serviço de que você depende cai — e
+quando volta.
 
 ```
 🔴 Cloudflare · D1 — fora do ar
@@ -17,7 +18,8 @@ qualquer outra no formato Statuspage), feeds RSS (AWS) e os seus próprios endpo
 mensagem quando algo **muda**: nada de alerta repetido a cada 5 minutos.
 
 - Node 24 + TypeScript, **zero dependências**.
-- Um container, uma pasta de estado, um arquivo de configuração.
+- Um container, uma pasta de estado, um arquivo de configuração — ou um workflow do GitHub Actions,
+  sem servidor.
 - Mensagens em português ou inglês.
 
 ## Como funciona
@@ -31,7 +33,7 @@ A cada `intervalSeconds` (padrão 5 min), o bot lê todos os serviços, compara 
 | Mudou de estado | Alerta. No `http`, só depois de **2 falhas seguidas** — um timeout isolado não acorda ninguém. |
 | Voltou ao normal | Alerta com quanto tempo ficou fora. |
 | Não conseguiu ler a página de status | Vira "sem leitura", não "fora do ar" — e só avisa depois de 3 leituras seguidas. |
-| O Telegram falhou | A mensagem fica guardada e sai no próximo ciclo. |
+| O envio falhou | A mensagem fica guardada e sai no próximo ciclo — por canal: o Slack falhar não reenvia pro Telegram. |
 | O container reiniciou | Nada se repete: o estado está no volume. |
 
 > **Rode fora do que você vigia.** Um monitor de Cloudflare rodando num Worker cai junto com a
@@ -222,6 +224,32 @@ curl -H "Authorization: Bearer $HTTP_TOKEN" https://statusbot.exemplo.com/api/st
 `status` é `down`, `degraded`, `unknown` (sem leitura), `maintenance` ou `up`, do pior pro melhor.
 Antes da primeira leitura responde `503` com `checkedAt: null`. Token errado ou ausente recebe `401`.
 
+## Para onde vão os alertas
+
+Ligue qualquer combinação com variáveis de ambiente (no `.env`, ou como secrets no GitHub Actions).
+Variável vazia conta como não definida; um canal configurado pela metade para o bot com erro.
+
+| Canal | Variáveis | Observações |
+|---|---|---|
+| Telegram | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | O único com comandos no chat (`/status`) e pedidos de acesso. |
+| Slack, webhook | `SLACK_WEBHOOK_URL` | Mensagens novas no canal ou DM escolhido ao criar o webhook. |
+| Slack, app | `SLACK_BOT_TOKEN` + `SLACK_CHANNEL` | `SLACK_THREAD_TS` opcional: cada alerta vira resposta naquela thread. |
+| Qualquer webhook | `WEBHOOK_URL` | `POST {"text": "..."}` em texto puro. |
+
+**Slack com webhook** (só alertas): crie um app em [api.slack.com/apps](https://api.slack.com/apps),
+ligue *Incoming Webhooks*, clique em *Add New Webhook to Workspace* e escolha o canal (ou você mesmo,
+pra DM). Cada webhook posta num lugar só.
+
+**Slack com token do app**, pra escolher o canal ou uma thread: dê ao app o escopo `chat:write`,
+instale, copie o *Bot User OAuth Token* (`xoxb-...`) e convide o app pro canal (`/invite @seu-app`).
+`SLACK_CHANNEL` é o ID no fim dos detalhes do canal (`C0...`). Pra thread, o `SLACK_THREAD_TS` sai do
+link da mensagem: `.../p1793984541720009` → `1793984541.720009`.
+
+**`WEBHOOK_URL`** aceita qualquer coisa que receba `{"text": "..."}`: Google Chat, Mattermost, n8n,
+Zapier — e Discord, com `/slack` no fim da URL do webhook do Discord.
+
+URLs de webhook e tokens são segredos: quem tiver um consegue postar como o bot.
+
 ## Configuração
 
 ```json
@@ -324,6 +352,37 @@ TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=... npm start     # roda
 ```
 
 Precisa de Node 24 ou mais novo.
+
+## Rodando no GitHub Actions
+
+Sem servidor: o [`.github/workflows/monitor.yml`](.github/workflows/monitor.yml) faz uma leitura
+(`--once`) a cada 5 minutos e guarda o estado entre execuções num artifact criptografado.
+
+Antes de escolher:
+
+- **5 minutos é o mínimo do GitHub, e não é exato.** Em horário de pico as execuções atrasam ou são
+  puladas.
+- **Só alertas.** Sem `/status`, sem pedidos de acesso, sem endpoint HTTP: não há bot rodando entre
+  uma leitura e outra.
+- **Grátis em repositório público; em privado, não.** São cerca de 8.600 execuções por mês, cada uma
+  cobrada como um minuto — bem acima do plano grátis de um repositório privado.
+- **Repositório público mostra logs e artifacts pra qualquer pessoa.** Por isso o `services.json` vem
+  de um secret e o estado é criptografado. Os logs só dizem quantos sinais e mudanças houve.
+- **O GitHub desliga workflows agendados após 60 dias sem commit** num repositório público.
+- **Roda no GitHub.** Se o GitHub Actions cair, o monitor cai junto — inclusive o alerta sobre isso.
+- Não rode ele **e** o bot no Docker com os mesmos canais: cada alerta chegaria duas vezes.
+
+Configuração, no repositório (seu fork, ou uma cópia) → *Settings* → *Secrets and variables* →
+*Actions*:
+
+1. Secret `STATUSBOT_SERVICES`: o conteúdo inteiro do seu `services.json`.
+2. Secret `STATUSBOT_STATE_KEY`: um texto aleatório longo, ex.: `openssl rand -hex 32`. Trocar a
+   chave recomeça o estado (uma leitura de base, sem alertas).
+3. Secrets dos canais que quiser, com os nomes de [Para onde vão os alertas](#para-onde-vão-os-alertas).
+4. Variável `STATUSBOT_MONITOR` = `on`. Opcional: variável `STATUSBOT_LANGUAGE`.
+5. *Actions* → *monitor* → *Run workflow* pra testar agora; depois ele roda sozinho.
+
+O estado salvo dura 3 dias: se nenhuma execução der certo nesse tempo, a próxima é uma nova base.
 
 ## Licença
 

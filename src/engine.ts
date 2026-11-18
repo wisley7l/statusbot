@@ -1,4 +1,5 @@
 // Pure core: previous state + new readings → new state + alerts. No I/O, so it is what the tests hit.
+import type { Outbox } from "./channels.ts";
 import type { Messages, Signal, Status } from "./types.ts";
 
 export interface Entry {
@@ -12,8 +13,8 @@ export interface Entry {
 
 export interface State {
   signals: Record<string, Entry>;
-  /** Messages that failed to send — retried on the next cycle, so an alert is never lost. */
-  outbox: string[];
+  /** Messages that failed to send, per channel — retried on the next cycle, so an alert is never lost. */
+  outbox: Outbox;
 }
 
 export interface Change {

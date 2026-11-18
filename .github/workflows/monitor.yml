@@ -1,0 +1,97 @@
+name: monitor
+
+# statusbot on GitHub Actions: one reading every ~5 min (at busy times GitHub delays or skips scheduled
+# runs). Off until the repository variable STATUSBOT_MONITOR is "on" — forks never run it.
+#
+# Logs and artifacts of a public repository are visible to anyone, so nothing private goes there:
+# services.json comes from a secret, and state.json is saved between runs as an encrypted artifact.
+# Setup: README, "Running on GitHub Actions".
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: read # to download the previous run's state
+  contents: read
+
+# One run at a time: two runs reading the same state would repeat alerts.
+concurrency:
+  group: monitor
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: vars.STATUSBOT_MONITOR == 'on'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      STATE_KEY: ${{ secrets.STATUSBOT_STATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Config and previous state
+        env:
+          SERVICES: ${{ secrets.STATUSBOT_SERVICES }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SERVICES" ] || [ -z "$STATE_KEY" ]; then
+            echo "::error::set the STATUSBOT_SERVICES and STATUSBOT_STATE_KEY secrets (README, Running on GitHub Actions)"
+            exit 1
+          fi
+          dir="$RUNNER_TEMP/statusbot"
+          mkdir -p "$dir"
+          printf '%s' "$SERVICES" > "$dir/services.json"
+          echo "STATUSBOT_CONFIG=$dir/services.json" >> "$GITHUB_ENV"
+          echo "STATUSBOT_STATE=$dir/state.json" >> "$GITHUB_ENV"
+
+          id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=statusbot-state&per_page=100" \
+            --jq '[.artifacts[] | select(.expired | not)] | sort_by(.created_at) | last | .id // empty')
+          if [ -z "$id" ]; then
+            echo "No saved state: this reading is the baseline."
+            exit 0
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > "$RUNNER_TEMP/state.zip"
+          if ! unzip -p "$RUNNER_TEMP/state.zip" state.enc \
+            | openssl enc -d -aes-256-cbc -pbkdf2 -pass env:STATE_KEY > "$dir/state.json"; then
+            echo "::warning::could not decrypt the saved state (STATUSBOT_STATE_KEY changed?) — starting over"
+            rm -f "$dir/state.json"
+          fi
+
+      - name: Read and alert
+        run: node src/main.ts --once
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL }}
+          SLACK_THREAD_TS: ${{ secrets.SLACK_THREAD_TS }}
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+          STATUSBOT_LANGUAGE: ${{ vars.STATUSBOT_LANGUAGE }}
+
+      # Also after a failed run: the state that was restored stays available to the next one.
+      - name: Encrypt state
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/out"
+          if [ -f "${STATUSBOT_STATE:-}" ]; then
+            openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:STATE_KEY -in "$STATUSBOT_STATE" -out "$RUNNER_TEMP/out/state.enc"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: statusbot-state
+          path: ${{ runner.temp }}/out/state.enc
+          retention-days: 3
+          if-no-files-found: ignore

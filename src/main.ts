@@ -1,4 +1,5 @@
 import { apiConfig, serve } from "./api.ts";
+import { channelsFromEnv, consoleChannel, deliver, type Channel } from "./channels.ts";
 import { CHECKS } from "./checks/index.ts";
 import { listComponents } from "./checks/statuspage.ts";
 import { dirname, join } from "node:path";
@@ -7,7 +8,7 @@ import { ConfigError, loadConfig } from "./config.ts";
 import { message, startMessage, step, type State } from "./engine.ts";
 import { MESSAGES } from "./i18n.ts";
 import { loadChats, loadState, saveChats, saveState } from "./state.ts";
-import { answerCallback, console_, editMessage, getUpdates, recentChats, setCommands, telegram, type Telegram } from "./telegram.ts";
+import { answerCallback, editMessage, getUpdates, recentChats, setCommands, telegram } from "./telegram.ts";
 import type { CheckContext, Config, Signal } from "./types.ts";
 
 const USER_AGENT = "statusbot (+https://github.com/wisley7l/statusbot)";
@@ -39,30 +40,17 @@ async function readAll(config: Config): Promise<Signal[]> {
   return results.flat();
 }
 
-async function deliver(bot: Telegram, state: State, texts: string[]): Promise<void> {
-  const queue = [...state.outbox, ...texts];
-  state.outbox = [];
-  for (const [i, text] of queue.entries()) {
-    try {
-      await bot.send(text);
-    } catch (err) {
-      log(`could not send (${(err as Error).message}) — ${queue.length - i} message(s) kept for the next cycle`);
-      state.outbox = queue.slice(i).slice(-50);
-      return;
-    }
-  }
-}
-
-async function cycle(config: Config, bot: Telegram, statePath: string, prev: State | undefined): Promise<State> {
+async function cycle(config: Config, channels: Channel[], statePath: string, prev: State | undefined): Promise<State> {
   const signals = await readAll(config);
-  const { state, changes } = step(prev ?? { signals: {}, outbox: [] }, signals, Date.now());
+  const { state, changes } = step(prev ?? { signals: {}, outbox: {} }, signals, Date.now());
   const t = MESSAGES[config.language];
   const texts = changes.map((c) => message(c, t));
   if (!prev && config.notifyOnStart) texts.unshift(startMessage(state, config.services.filter((s) => s.enabled !== false).length, t));
-  await deliver(bot, state, texts);
+  state.outbox = await deliver(channels, state.outbox, texts, log);
   await saveState(statePath, state);
   const off = Object.values(state.signals).filter((e) => e.status !== "up").length;
-  log(`${signals.length} signals, ${off} not up, ${changes.length} change(s)${state.outbox.length ? `, ${state.outbox.length} unsent` : ""}`);
+  const unsent = Object.values(state.outbox).reduce((n, q) => n + q.length, 0);
+  log(`${signals.length} signals, ${off} not up, ${changes.length} change(s)${unsent ? `, ${unsent} unsent` : ""}`);
   return state;
 }
 
@@ -70,13 +58,15 @@ async function run(once: boolean): Promise<void> {
   const config = await loadConfig(env.STATUSBOT_CONFIG ?? "services.json", env);
   const statePath = env.STATUSBOT_STATE ?? "state.json";
   const dry = env.DRY_RUN === "1";
-  if (!dry && (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID)) {
-    throw new ConfigError("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are required (or DRY_RUN=1 to print instead of sending)");
+  const channels = dry ? [consoleChannel] : channelsFromEnv(env);
+  if (!channels.length) {
+    throw new ConfigError("nowhere to send alerts — set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID, SLACK_WEBHOOK_URL, " +
+      "SLACK_BOT_TOKEN + SLACK_CHANNEL or WEBHOOK_URL (or DRY_RUN=1 to print instead of sending)");
   }
   const api = once ? undefined : apiConfig(env);
-  const bot = dry ? console_ : telegram(env.TELEGRAM_BOT_TOKEN!, env.TELEGRAM_CHAT_ID!);
   const services = config.services.filter((s) => s.enabled !== false).length;
-  log(`watching ${services} services every ${config.intervalSeconds}s, language=${config.language}${dry ? ", DRY_RUN" : ""}`);
+  const every = once ? "once" : `every ${config.intervalSeconds}s`;
+  log(`watching ${services} services ${every}, language=${config.language}, sending to ${channels.map((c) => c.name).join(", ")}`);
 
   // A restart is not a first run: the saved state keeps alerts from repeating.
   let state = await loadState(statePath);
@@ -90,8 +80,10 @@ async function run(once: boolean): Promise<void> {
   }
 
   let listening: Promise<void> | undefined;
-  if (!dry && !once) {
-    const token = env.TELEGRAM_BOT_TOKEN!;
+  // Chat commands and access requests are Telegram's, and need the bot running (not --once).
+  if (!dry && !once && env.TELEGRAM_BOT_TOKEN) {
+    const token = env.TELEGRAM_BOT_TOKEN;
+    const bot = telegram(token, env.TELEGRAM_CHAT_ID!);
     const t = MESSAGES[config.language];
     const admin = env.TELEGRAM_CHAT_ID!;
     // Who else may use the bot, approved by the admin in the chat. Next to state.json, in the volume.
@@ -123,7 +115,7 @@ async function run(once: boolean): Promise<void> {
 
   while (!stop.signal.aborted) {
     try {
-      state = await cycle(config, bot, statePath, state);
+      state = await cycle(config, channels, statePath, state);
       checkedAt = Date.now();
     } catch (err) {
       log(`cycle failed: ${(err as Error).stack ?? err}`);

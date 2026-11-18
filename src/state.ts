@@ -4,8 +4,10 @@ import type { State } from "./engine.ts";
 
 export async function loadState(path: string): Promise<State | undefined> {
   try {
-    const s = JSON.parse(await readFile(path, "utf8")) as State;
-    return { signals: s.signals ?? {}, outbox: s.outbox ?? [] };
+    const s = JSON.parse(await readFile(path, "utf8")) as { signals?: State["signals"]; outbox?: State["outbox"] | string[] };
+    // Before channels, the outbox was one list, and it was Telegram's.
+    const outbox = Array.isArray(s.outbox) ? (s.outbox.length ? { telegram: s.outbox } : {}) : (s.outbox ?? {});
+    return { signals: s.signals ?? {}, outbox };
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     console.warn(`warning: ignoring unreadable state at ${path}: ${(err as Error).message}`);

@@ -36,13 +36,6 @@ export function telegram(token: string, chatId: string): Telegram {
   };
 }
 
-/** Prints instead of sending — for DRY_RUN=1 and for trying the config without a bot. */
-export const console_: Telegram = {
-  async send(text) {
-    console.log(`\n--- message ---\n${text.replace(/<\/?b>/g, "")}\n---------------`);
-  },
-};
-
 async function call<T>(token: string, method: string, params: object, signal: AbortSignal): Promise<T> {
   const res = await fetch(`${API}/bot${token}/${method}`, {
     method: "POST",

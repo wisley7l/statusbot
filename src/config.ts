@@ -26,10 +26,11 @@ export function parseConfig(raw: unknown, env: NodeJS.ProcessEnv, where = "confi
   if (typeof raw !== "object" || raw === null) fail("must be a JSON object");
   const c = raw as Record<string, unknown>;
 
-  const language = (env.STATUSBOT_LANGUAGE ?? c.language ?? "pt") as Language;
+  // Empty variables count as unset: GitHub Actions passes an unset variable as "".
+  const language = (env.STATUSBOT_LANGUAGE || c.language || "pt") as Language;
   if (!LANGUAGES.includes(language)) fail(`"language" must be one of ${LANGUAGES.join(", ")}`);
 
-  const intervalSeconds = Number(env.STATUSBOT_INTERVAL ?? c.intervalSeconds ?? 300);
+  const intervalSeconds = Number(env.STATUSBOT_INTERVAL || c.intervalSeconds || 300);
   if (!Number.isFinite(intervalSeconds) || intervalSeconds < 30) fail(`"intervalSeconds" must be a number >= 30`);
 
   if (!Array.isArray(c.services) || c.services.length === 0) fail(`"services" must be a non-empty list`);
