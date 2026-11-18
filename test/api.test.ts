@@ -8,7 +8,7 @@ import type { Signal, Status } from "../src/types.ts";
 
 const MIN = 60_000;
 const sig = (key: string, status: Status, detail?: string, link?: string): Signal => ({ key, label: key, status, detail, link, confirmations: 1 });
-const empty: State = { signals: {}, outbox: [] };
+const empty: State = { signals: {}, outbox: {} };
 const stop = new AbortController();
 after(() => stop.abort());
 

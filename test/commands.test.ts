@@ -8,7 +8,7 @@ import type { Signal, Status } from "../src/types.ts";
 
 const MIN = 60_000;
 const sig = (key: string, status: Status, detail?: string): Signal => ({ key, label: key, status, detail, confirmations: 1 });
-const empty: State = { signals: {}, outbox: [] };
+const empty: State = { signals: {}, outbox: {} };
 const chat = (type = "private", admin = false, id = "42"): ChatInfo => ({ id, type, admin });
 
 function view(signals: Signal[], extra: Partial<View> = {}): View {

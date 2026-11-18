@@ -1,7 +1,7 @@
 {
   "name": "statusbot",
   "version": "0.1.0",
-  "description": "Telegram alerts when the services you depend on go down — status pages, RSS feeds and your own endpoints.",
+  "description": "Alerts on Telegram, Slack or any webhook when the services you depend on go down — status pages, RSS feeds and your own endpoints.",
   "license": "MIT",
   "private": true,
   "type": "module",

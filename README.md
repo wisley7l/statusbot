@@ -2,7 +2,8 @@
 
 **English** · [Português](README.pt-BR.md)
 
-Telegram alerts when a service you depend on goes down — and when it comes back.
+Alerts on Telegram, Slack or any webhook when a service you depend on goes down — and when it
+comes back.
 
 ```
 🔴 Cloudflare · D1 — down
@@ -17,7 +18,7 @@ in the Statuspage format), RSS feeds (AWS) and your own endpoints. It only messa
 **changes**: no repeated alert every 5 minutes.
 
 - Node 24 + TypeScript, **zero dependencies**.
-- One container, one state folder, one config file.
+- One container, one state folder, one config file — or a GitHub Actions workflow, no server.
 - Messages in English or Portuguese.
 
 ## How it works
@@ -31,7 +32,7 @@ reading (kept in `/data/state.json`) and reports what changed.
 | Status changed | Alert. For `http`, only after **2 failures in a row** — one timeout wakes no one. |
 | Back to normal | Alert with how long it lasted. |
 | Could not read the status page | Becomes "no reading", not "down" — and only after 3 readings in a row. |
-| Telegram failed | The message is kept and sent on the next cycle. |
+| Sending failed | The message is kept and sent on the next cycle — per channel: Slack failing does not resend to Telegram. |
 | Container restarted | Nothing repeats: the state is on the volume. |
 
 > **Run it outside what you watch.** A Cloudflare monitor on a Worker goes down with Cloudflare.
@@ -223,6 +224,33 @@ curl -H "Authorization: Bearer $HTTP_TOKEN" https://statusbot.example.com/api/st
 `status` is `down`, `degraded`, `unknown` (no reading), `maintenance` or `up`, worst first. Before the
 first reading it answers `503` with `checkedAt: null`. A wrong or missing token gets `401`.
 
+## Where alerts go
+
+Turn on any combination with environment variables (in `.env`, or as secrets on GitHub Actions).
+An empty variable counts as unset; a half-set channel stops the bot with an error.
+
+| Channel | Variables | Notes |
+|---|---|---|
+| Telegram | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | The only one with chat commands (`/status`) and access requests. |
+| Slack, webhook | `SLACK_WEBHOOK_URL` | New messages in the channel or DM chosen when creating the webhook. |
+| Slack, app | `SLACK_BOT_TOKEN` + `SLACK_CHANNEL` | Optional `SLACK_THREAD_TS`: every alert as a reply in that thread. |
+| Any webhook | `WEBHOOK_URL` | `POST {"text": "..."}` in plain text. |
+
+**Slack with a webhook** (alerts only): create an app at [api.slack.com/apps](https://api.slack.com/apps),
+turn on *Incoming Webhooks*, click *Add New Webhook to Workspace* and pick the channel (or yourself,
+for a DM). Each webhook posts to one place.
+
+**Slack with an app token**, to pick the channel or a thread: give the app the `chat:write` scope,
+install it, copy the *Bot User OAuth Token* (`xoxb-...`) and invite the app to the channel
+(`/invite @your-app`). `SLACK_CHANNEL` is the ID at the end of the channel's details (`C0...`). For a
+thread, `SLACK_THREAD_TS` comes from the message link: `.../p1793984541720009` →
+`1793984541.720009`.
+
+**`WEBHOOK_URL`** takes anything that accepts `{"text": "..."}`: Google Chat, Mattermost, n8n,
+Zapier — and Discord, with `/slack` at the end of the Discord webhook URL.
+
+Webhook URLs and tokens are secrets: anyone who has one can post as the bot.
+
 ## Configuration
 
 ```json
@@ -322,6 +350,35 @@ TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=... npm start     # run
 ```
 
 Requires Node 24 or newer.
+
+## Running on GitHub Actions
+
+No server: [`.github/workflows/monitor.yml`](.github/workflows/monitor.yml) runs one reading
+(`--once`) every 5 minutes and keeps the state between runs as an encrypted artifact.
+
+Before choosing it:
+
+- **Every 5 minutes is GitHub's minimum, and not exact.** At busy times runs are late or skipped.
+- **Alerts only.** No `/status`, no access requests, no HTTP endpoint: there is no bot running between
+  readings.
+- **Free on a public repository; not on a private one.** About 8,600 runs a month, each billed as a
+  minute, is well over the free plan of a private repository.
+- **A public repository shows its logs and artifacts to anyone.** That is why `services.json` comes
+  from a secret and the state is encrypted. The logs only say how many signals and changes there were.
+- **GitHub turns off scheduled workflows after 60 days without commits** in a public repository.
+- **It runs on GitHub.** If GitHub Actions is down, so is the monitor — including the alert about it.
+- Do not run it **and** the Docker bot with the same channels: every alert would arrive twice.
+
+Setup, in the repository (your fork, or a copy) → *Settings* → *Secrets and variables* → *Actions*:
+
+1. Secret `STATUSBOT_SERVICES`: the whole content of your `services.json`.
+2. Secret `STATUSBOT_STATE_KEY`: any long random text, e.g. `openssl rand -hex 32`. Changing it
+   starts the state over (one baseline reading, no alerts).
+3. Secrets for the channels you want, with the names in [Where alerts go](#where-alerts-go).
+4. Variable `STATUSBOT_MONITOR` = `on`. Optional: variable `STATUSBOT_LANGUAGE`.
+5. *Actions* → *monitor* → *Run workflow* to try it now; after that it runs by itself.
+
+The saved state lasts 3 days: if no run succeeds in that time, the next one is a new baseline.
 
 ## License
 

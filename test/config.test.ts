@@ -16,6 +16,8 @@ test("defaults and env overrides", () => {
   assert.deepEqual([c.language, c.intervalSeconds, c.notifyOnStart], ["pt", 300, true]);
   const e = parseConfig({ language: "pt", services: [svc] }, { STATUSBOT_LANGUAGE: "en", STATUSBOT_INTERVAL: "60" });
   assert.deepEqual([e.language, e.intervalSeconds], ["en", 60]);
+  const blank = parseConfig({ language: "en", services: [svc] }, { STATUSBOT_LANGUAGE: "", STATUSBOT_INTERVAL: "" });
+  assert.deepEqual([blank.language, blank.intervalSeconds], ["en", 300]);
 });
 
 test("errors say what to fix", () => {

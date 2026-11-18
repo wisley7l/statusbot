@@ -7,7 +7,7 @@ import type { Signal, Status } from "../src/types.ts";
 const MIN = 60_000;
 const sig = (status: Status, extra: Partial<Signal> = {}): Signal =>
   ({ key: "Cloudflare · D1", label: "Cloudflare · D1", status, confirmations: 1, ...extra });
-const empty: State = { signals: {}, outbox: [] };
+const empty: State = { signals: {}, outbox: {} };
 
 test("first reading is a baseline, not an alert", () => {
   const { state, changes } = step(empty, [sig("down")], 0);
